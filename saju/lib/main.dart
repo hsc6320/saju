@@ -14,10 +14,10 @@ Future<void> main() async {
   
   try {
     await dotenv.load(fileName: ".env");
-    print("🔑 Open API KEY: ${dotenv.env['OPENAI_API_KEY']}");
+    //print("🔑 Open API KEY: ${dotenv.env['OPENAI_API_KEY']}");
     
-    print("🔑 KaKao API KEY: ${dotenv.env['YOUR_NATIVE_APP_KEY']}");
-    print("🔑 KaKao API KEY: ${dotenv.env['YOUR_JAVASCRIPT_APP_KEY']}");
+    //print("🔑 KaKao API KEY: ${dotenv.env['YOUR_NATIVE_APP_KEY']}");
+    //print("🔑 KaKao API KEY: ${dotenv.env['YOUR_JAVASCRIPT_APP_KEY']}");
     KakaoSdk.init(
         nativeAppKey: dotenv.get('YOUR_NATIVE_APP_KEY'),//'${YOUR_NATIVE_APP_KEY}', //c747a58a93f19c338713e831e2ed60f6
         javaScriptAppKey: dotenv.get('YOUR_JAVASCRIPT_APP_KEY'),//'${YOUR_JAVASCRIPT_APP_KEY}',857eedec26bbaad073e6e61e1c8d867f
