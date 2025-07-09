@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "437621362703",
+    "project_id": "chatsaju-5cd67",
+    "storage_bucket": "chatsaju-5cd67.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:437621362703:android:38b4890d6041b70aaed37a",
+        "android_client_info": {
+          "package_name": "com.hsc.saju"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "437621362703-qmhbdaajffhfuch3l3ep2jgvju5m93s0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.hsc.saju",
+            "certificate_hash": "ddde8737ba3257687ba3d42fcc4885d5dc42f850"
+          }
+        },
+        {
+          "client_id": "437621362703-mefsl1ua8333oiu12t510s377bu74m7j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBShWMI3z25uOxJvO5TnFq5fr73xkTQawo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "437621362703-mefsl1ua8333oiu12t510s377bu74m7j.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "437621362703-2b92de2rd3l8bjolcl91c8qm19arn2lv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hsc.saju"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
