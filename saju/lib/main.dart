@@ -13,15 +13,15 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized(); // 비동기 초기화를 위한 준비
   
   try {
-   // await dotenv.load(fileName: ".env");
-    //print("🔑 Open API KEY: ${dotenv.env['OPENAI_API_KEY']}");
+    await dotenv.load(fileName: ".env");
+    print("🔑 Open API KEY: ${dotenv.env['OPENAI_API_KEY']}");
     
-    //print("🔑 KaKao API KEY: ${dotenv.env['YOUR_NATIVE_APP_KEY']}");
-    //print("🔑 KaKao API KEY: ${dotenv.env['YOUR_JAVASCRIPT_APP_KEY']}");
-   // KakaoSdk.init(
-   //     nativeAppKey: dotenv.get('YOUR_NATIVE_APP_KEY'),//'${YOUR_NATIVE_APP_KEY}', //c747a58a93f19c338713e831e2ed60f6
-   //     javaScriptAppKey: dotenv.get('YOUR_JAVASCRIPT_APP_KEY'),//'${YOUR_JAVASCRIPT_APP_KEY}',857eedec26bbaad073e6e61e1c8d867f
-   // );
+    print("🔑 KaKao API KEY: ${dotenv.env['YOUR_NATIVE_APP_KEY']}");
+    print("🔑 KaKao API KEY: ${dotenv.env['YOUR_JAVASCRIPT_APP_KEY']}");
+    KakaoSdk.init(
+        nativeAppKey: dotenv.get('YOUR_NATIVE_APP_KEY'),//'${YOUR_NATIVE_APP_KEY}', //c747a58a93f19c338713e831e2ed60f6
+        javaScriptAppKey: dotenv.get('YOUR_JAVASCRIPT_APP_KEY'),//'${YOUR_JAVASCRIPT_APP_KEY}',857eedec26bbaad073e6e61e1c8d867f
+    );
   } catch (e) { 
     print("❌ .env 파일 로딩 실패: $e");
   }

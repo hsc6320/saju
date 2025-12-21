@@ -4,166 +4,127 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:saju/SajuProvider.dart';
-import 'package:saju/SharedPreferences.dart';
-import 'package:saju/models/fortune.dart';
-import 'package:saju/screens/fortune_screen.dart';
-import 'package:saju/screens/home_screen.dart';
-import 'package:saju/screens/saju_input_screen.dart';
-import 'package:saju/screens/saju_result_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../SajuProvider.dart';
+import '../constants/saju_constants.dart';
+import '../models/fortune.dart';
+import '../models/saju_info.dart';
+import '../models/selected_saju_data.dart';
+import '../services/saju_storage_service.dart';
+import 'home_screen.dart';
+import 'saju_input_screen.dart';
+import 'saju_result_screen.dart';
+
+/// 정렬 옵션
+enum SortOption { date, nameAsc, nameDesc }
+
+/// 사주 목록 화면
 class SajuListScreen extends StatefulWidget {
   final DateTime? selectedTime;
   final List<Map<String, dynamic>>? inputOption;
-  const SajuListScreen({super.key, this.selectedTime, this.inputOption});
+
+  const SajuListScreen({
+    super.key,
+    this.selectedTime,
+    this.inputOption,
+  });
 
   @override
   State<SajuListScreen> createState() => _SajuListScreenState();
 }
 
-enum SortOption { date, nameAsc, nameDesc }
-
 class _SajuListScreenState extends State<SajuListScreen> {
-  String? yearJi = '';
-  String? wolJu = '';
-  String? ilJu = '';
-  String? siju = '';
+  SajuInfo? _selectedSaju;
+  SelectedSajuData _selectedData = SelectedSajuData.empty();
+  Widget? _rightPanelContent; // 우측 패널 내용
 
-  SajuInfo? saju;
-  String? koreanAge = '';
-  String? currentDaewoon = '';
-  Map<String, String?> ganji = {};
-  List<String> daewoonList = [];
+  String _searchQuery = '';
+  SortOption _sortOption = SortOption.date;
 
-   
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-    _loadSelectedSaju();
+    _loadData();
   }
-  
-  SajuInfo? selectedSaju;
 
-  String searchQuery = "";
-  SortOption sortOption = SortOption.date;
+  Future<void> _loadData() async {
+    await _loadUserData();
+    await _loadSelectedSaju();
+  }
 
-  Future<void> _loadSelectedSaju() async {
-  final prefs = await SharedPreferences.getInstance();
-  final sajuJson = prefs.getString('selected_saju');
-  final ganjiJson = prefs.getString('selected_ganji');
-  final daewoonJson = prefs.getString('selected_daewoon');
-  final koreaAgeJson = prefs.getString('selected_age');
-  final current_daewoonJson = prefs.getString('selected_current_daewoon');
-
-  if (sajuJson == null) return;
-
-  final SajuInfo saju = SajuInfo.fromJson(jsonDecode(sajuJson));
-  final String koreanAge = koreaAgeJson != null ? jsonDecode(koreaAgeJson) : '';
-  final String currentDaewoon = current_daewoonJson != null ? jsonDecode(current_daewoonJson) : '';
-  final Map<String, String?> ganji =
-      ganjiJson != null ? Map<String, String?>.from(jsonDecode(ganjiJson)) : {};
-  final List<String> daewoonList =
-      daewoonJson != null ? List<String>.from(jsonDecode(daewoonJson)) : [];
-
-  setState(() {
-    selectedSaju = saju;
-    this.koreanAge = koreanAge;
-    this.currentDaewoon = currentDaewoon;
-    this.ganji = ganji;
-    this.daewoonList = daewoonList;
-  });
-
-  print("✅ SajuListScreen 복구된 사주: ${saju.name}, 나이: $koreanAge, 현재 대운: $currentDaewoon");
-}
-
-  void _deleteItem(SajuInfo saju) async {
-    final provider = Provider.of<SajuProvider>(context, listen: false);
-    provider.remove(saju); // ✅ Provider 내부에서 SharedPreferences까지 삭제
-    final prefs = await SharedPreferences.getInstance();
-    
-      // ✅ 만약 현재 선택된 사주가 삭제된 사주라면 SharedPreferences도 초기화
-    if (selectedSaju?.name == saju.name && selectedSaju?.birth == saju.birth) {
-      await prefs.remove('selected_saju');
-      await prefs.remove('selected_ganji');
-      await prefs.remove('selected_daewoon');
-      await prefs.remove('selected_age');
-      await prefs.remove('selected_current_daewoon');
-
-      setState(() {
-        selectedSaju = null;
-        ganji = {};
-        daewoonList = [];
-        koreanAge = '';
-        currentDaewoon = '';
+  Future<void> _loadUserData() async {
+    final data = await sajuStorage.loadSajuList();
+    if (data.isNotEmpty && mounted) {
+      Future.microtask(() {
+        Provider.of<SajuProvider>(context, listen: false).setList(data);
       });
     }
-      // ✅ 선택된 사주와 삭제 대상이 같으면 선택 해제
-    setState(() {
-      if (selectedSaju == saju) {
-        selectedSaju = null;
-      }
-    });
-
-    // ✅ 삭제 후 필터링된 리스트도 새로고침 필요
-  //  _refreshFilteredList(); // 예: searchQuery 반영된 리스트 재계산 함수
   }
 
-
-  void _editItem(SajuInfo saju) async {
-    //edited 수정한 값 반환
-    final edited = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        //builder: (_) => SajuInputScreen(saju : saju),
-        builder: (_) => SajuInputScreen(
-          saju: saju.copyWith(isEditing: true),
-        )
-      ),
-    );
-    if (edited != null && edited is SajuInfo) {
-      final sajuProvider = Provider.of<SajuProvider>(context, listen: false);
-      sajuProvider.updateItem(saju, edited);
+  Future<void> _loadSelectedSaju() async {
+    final data = await sajuStorage.loadSelectedSaju();
+    if (data.isValid) {
+      setState(() {
+        _selectedSaju = data.saju;
+        _selectedData = data;
+      });
     }
   }
 
-  void _changeSort(SortOption option) {
-    setState(() => sortOption = option);
+  /// 사주 삭제
+  Future<void> _deleteItem(SajuInfo saju) async {
+    final provider = Provider.of<SajuProvider>(context, listen: false);
+    await provider.remove(saju);
+
+    // 선택된 사주가 삭제된 경우 초기화
+    if (_selectedSaju?.name == saju.name && _selectedSaju?.birth == saju.birth) {
+      await sajuStorage.clearSelectedSaju();
+      setState(() {
+        _selectedSaju = null;
+        _selectedData = SelectedSajuData.empty();
+      });
+    }
   }
-  List<Map<String, dynamic>> generateSolarTermsForSaju(SajuInfo saju, String isLunar ) {
-    String lunar = isLunar.toString();
+
+  /// 사주 수정
+  Future<void> _editItem(SajuInfo saju) async {
+    final edited = await Navigator.push<SajuInfo>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SajuInputScreen(
+          saju: saju.copyWith(isEditing: true),
+        ),
+      ),
+    );
+
+    if (edited != null && mounted) {
+      final provider = Provider.of<SajuProvider>(context, listen: false);
+      await provider.updateItem(saju, edited);
+    }
+  }
+
+  /// 사주 조회용 inputOption 생성
+  List<Map<String, dynamic>> _generateInputOption(SajuInfo saju) {
     return [
       {
-       "name": saju.name,
-       "solar_date": lunar, // true이면 양력
-        "gender": saju.relation, // relation을 gender로 사용 중
+        'name': saju.name,
+        'solar_date': saju.lunar,
+        'gender': saju.relation,
       }
     ];
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final sajuProvider = Provider.of<SajuProvider>(context);
-    final sajuList = sajuProvider.sajuList;
-    if(sajuList.isEmpty) {
-       print("❌ 사주 목록이 없습니다.");
-    }
+  /// 정렬된 리스트 반환
+  List<SajuInfo> _getSortedList(List<SajuInfo> list) {
+    final filtered = list.where((item) => item.name.contains(_searchQuery)).toList();
 
-    List<SajuInfo> filteredList = sajuList
-        .where((item) => item.name.contains(searchQuery))
-        .toList();
-
-    if (filteredList.isEmpty) {
-      print("🔍 검색 결과 없음 or 사주 없음");
-    }
-
-    // 즐겨찾기 우선 정렬 후 일반 정렬 적용
-    filteredList.sort((a, b) {
+    filtered.sort((a, b) {
+      // 즐겨찾기 우선
       if (a.isFavorite != b.isFavorite) {
-        return b.isFavorite ? 1 : -1; // 즐겨찾기 true가 먼저
+        return b.isFavorite ? 1 : -1;
       }
-      switch (sortOption) {
+      // 정렬 옵션 적용
+      switch (_sortOption) {
         case SortOption.date:
           return b.birth.compareTo(a.birth);
         case SortOption.nameAsc:
@@ -173,415 +134,435 @@ class _SajuListScreenState extends State<SajuListScreen> {
       }
     });
 
+    return filtered;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sajuProvider = Provider.of<SajuProvider>(context);
+    final filteredList = _getSortedList(sajuProvider.sajuList);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("등록된 사주 정보", style: TextStyle(color: Colors.black)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black54),
-          //onPressed: () => Navigator.pop(context),
-          onPressed: () {
-            if(sajuList.isEmpty) {
-              // 사주 목록이 아예 없을 때 → HomeScreen으로 pop
-              Navigator.pop(context, {
-                "saju": null,
-                "ganji": null,
-                "daewoon": null,
-              });
-              return;
-            }
+      appBar: _buildAppBar(sajuProvider.isEmpty),
+      backgroundColor: Colors.white,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWideScreen = constraints.maxWidth > 800;
+          
+          if (isWideScreen) {
+            // 큰 화면: 좌우 분할 레이아웃
+            return Row(
+              children: [
+                // 좌측: 사주 목록 (고정 너비)
+                SizedBox(
+                  width: 400,
+                  child: Column(
+                    children: [
+                      if (_selectedSaju != null && _selectedSaju!.isValid)
+                        _buildSelectedHeader(),
+                      Expanded(
+                        child: _buildSajuList(filteredList),
+                      ),
+                    ],
+                  ),
+                ),
+                // 구분선
+                Container(width: 1, color: Colors.grey.shade300),
+                // 우측: 선택된 사주 결과 또는 빈 화면
+                Expanded(
+                  child: _rightPanelContent ?? _buildEmptyRightPanel(),
+                ),
+              ],
+            );
+          } else {
+            // 작은 화면: 기존 레이아웃
+            return Stack(
+              children: [
+                Column(
+                  children: [
+                    if (_selectedSaju != null && _selectedSaju!.isValid)
+                      _buildSelectedHeader(),
+                    Expanded(
+                      child: _buildSajuList(filteredList),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }
+        },
+      ),
+      bottomNavigationBar: LayoutBuilder(
+        builder: (context, constraints) {
+          // 작은 화면에서만 하단 바 표시
+          if (constraints.maxWidth > 800) {
+            return const SizedBox.shrink();
+          }
+          return _buildBottomBar();
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyRightPanel() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.info_outline, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(
+            '좌측에서 사주를 선택하세요',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(bool isEmpty) {
+    return AppBar(
+      title: const Text('등록된 사주 정보', style: TextStyle(color: Colors.black)),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black54),
+        onPressed: () {
+          if (isEmpty) {
+            Navigator.pop(context, {'saju': null, 'ganji': null, 'daewoon': null});
+          } else {
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (_) => const HomeScreen()),
               (route) => false,
             );
-          },
+          }
+        },
+      ),
+      centerTitle: false,
+      backgroundColor: Colors.white,
+      elevation: 0,
+      actions: [
+        PopupMenuButton<SortOption>(
+          icon: const Icon(Icons.sort, color: Colors.grey),
+          onSelected: (option) => setState(() => _sortOption = option),
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: SortOption.date, child: Text('생년월일순')),
+            PopupMenuItem(value: SortOption.nameAsc, child: Text('이름 오름차순')),
+            PopupMenuItem(value: SortOption.nameDesc, child: Text('이름 내림차순')),
+          ],
         ),
-        centerTitle: false,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          PopupMenuButton<SortOption>(
-            icon: const Icon(Icons.sort, color: Colors.grey),
-            onSelected: _changeSort,
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: SortOption.date,
-                child: Text("생년월일순"),
-              ),
-              const PopupMenuItem(
-                value: SortOption.nameAsc,
-                child: Text("이름 오름차순"),
-              ),
-              const PopupMenuItem(
-                value: SortOption.nameDesc,
-                child: Text("이름 내림차순"),
-              ),
-            ],
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(56),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              onChanged: (value) => setState(() => searchQuery = value),
-              decoration: InputDecoration(
-                hintText: '이름 검색',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.grey.shade100,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(56),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: TextField(
+            onChanged: (value) => setState(() => _searchQuery = value),
+            decoration: InputDecoration(
+              hintText: '이름 검색',
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: Colors.grey.shade100,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
               ),
             ),
           ),
         ),
       ),
-      backgroundColor: Colors.white,
-      body : Stack(
+    );
+  }
+
+  Widget _buildSelectedHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      color: Colors.grey.shade100,
+      child: Row(
         children: [
-          Column(
+          Stack(
             children: [
-              if (selectedSaju != null && selectedSaju!.isValid) // ✅ 대표 회표시 영역
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                color: Colors.grey.shade100,
-                child : Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundColor: Colors.yellow.shade100,
-                          child: Icon(Icons.person, size: 28, color: Colors.black),
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Icon(Icons.check_circle, color: Colors.amber, size: 20),
-                        )
-                      ],
-                    ),
-                    const SizedBox(width : 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row (
-                          children: [
-                            Text(
-                              selectedSaju!.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                selectedSaju!.element,
-                                style: const TextStyle(color: Colors.white, fontSize: 12),
-                              ),
-                            )
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${selectedSaju!.birth} (${selectedSaju!.relation})',
-                          style: const TextStyle(color: Colors.grey),
-                        )
-                      ],
-                    )
-                  ],
-                )
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: Colors.yellow.shade100,
+                child: const Icon(Icons.person, size: 28, color: Colors.black),
               ),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: filteredList.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final saju = filteredList[index];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.grey.shade200,
-                        child: Icon(
-                          saju.relation == '남자' ? Icons.man : Icons.woman,
-                          color: saju.isFavorite ? Colors.amber : Colors.black87,
-                        ),
-                      ),
-                      onTap: () {
-                        setState(() {
-                          if (selectedSaju == saju) {
-                            // 이미 선택된 항목이면 → 선택 해제
-                            print("이미 선택된 항목이면 → 선택 해제");
-                            selectedSaju = null;
-                          } else {
-                            // 새 항목 선택
-                            selectedSaju = saju;
-                            print("클릭정보 : ${selectedSaju!.name}");
-                          }
-                        });
-                     //   Navigator.pop(context, saju); // ← 선택된 사주 리턴
-                      },
-                      selected: selectedSaju == saju,
-                      selectedTileColor: Colors.grey.shade100,
-                      title: Row(
-                        children: [
-                          Text(saju.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                            //  color: _elementColor(saju.element/*, widget.selectedTime!*/),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              saju.element,
-                              style: const TextStyle(fontSize: 12, color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                      subtitle: Text("${saju.birth} (${saju.relation})",
-                        style: const TextStyle(color: Colors.grey)),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          final saju = filteredList[index]; // 🔥 filteredList 기준으로 가져와야 함
-                          //final saju = sajuList[index]; // 리스트에서 해당 SajuInfo 추출
-                          if (value == 'edit') {
-                            _editItem(saju);
-                          } else if (value == 'delete') {
-                            _deleteItem(saju);
-                          } else if (value == 'favorite') {
-                            //_toggleFavorite(index);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'edit', child: Text('수정')),
-                          const PopupMenuItem(value: 'delete', child: Text('삭제')),
-                          const PopupMenuItem(value: 'favorite', child: Text('즐겨찾기 토글')),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+              const Positioned(
+                right: 0,
+                bottom: 0,
+                child: Icon(Icons.check_circle, color: Colors.amber, size: 20),
               ),
             ],
-          )
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    _selectedSaju!.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(width: 6),
+                  if (_selectedSaju!.element.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        _selectedSaju!.element,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${_selectedSaju!.birth} (${_selectedSaju!.relation})',
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ],
+          ),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selectedSaju == null)
-              SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        //builder: (_) => SajuInputScreen(saju : saju),
-                        builder: (_) => SajuInputScreen(
-                      //   saju: saju.copyWith(isEditing: true),
-                        )
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text("사주 추가", style: TextStyle(fontSize: 18, color: Colors.white)),
-                ),
-              ),
-            if (selectedSaju != null)
-              SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8, // 🔹 전체 화면의 60%
-                child : ElevatedButton(
-                  onPressed: () {
-                    print('selectedSaju!.lunar : ${selectedSaju!.lunar}, ${selectedSaju!.lunar}');
-                    final inputOption = generateSolarTermsForSaju(selectedSaju!, selectedSaju!.lunar);
-                    
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => SajuResultScreen(inputOption: inputOption, selectedTime: selectedSaju!.birthDateTime, saju: selectedSaju!,),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurpleAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text("사주 조회", style: TextStyle(fontSize: 18, color: Colors.white)),
-                ),
-              ),
-            //const SizedBox(height: 12),
-            const SizedBox(height: 8),
-            if (selectedSaju != null)
-              SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final inputOption = generateSolarTermsForSaju(selectedSaju!, selectedSaju!.lunar);
-                    
-                     // 년주, 월주, 일주, 시주 정보 가져오기
-                    final result = await Navigator.push (
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => SajuResultScreen(
-                          inputOption: inputOption,
-                          selectedTime: selectedSaju!.birthDateTime,
-                          isSelectMode: true, 
-                          saju: selectedSaju!,
-                        ),
-                      ),
-                    );
-                    print('selectedSaju : ${selectedSaju!.name}');
-
-                    if (result != null && result is Map<String, dynamic>) {
-                      saju = result["saju"] as SajuInfo?;
-                      koreanAge = result["age"] as String;
-                      currentDaewoon = result["currentDaewoon"] as String;
-                      ganji = Map<String, String?>.from(result["ganji"]);
-                      daewoonList = List<String>.from(result["daewoon"] ?? []);
-
-
-                      print("✅ 선택된 대운: $daewoonList, 현재 대운 : $currentDaewoon");
-
-                      if (saju != null && ganji != null) {
-                        print("✅ 선택된 사주 이름: ${saju!.name}");
-                        print("✅ 선택된 간지들: $ganji");
-                        print("✅ 선택된 대운: $daewoonList");
-
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setString('selected_saju', jsonEncode(saju!.toJson()));
-                        await prefs.setString('selected_ganji', jsonEncode(ganji));
-                        await prefs.setString('selected_daewoon', jsonEncode(daewoonList));
-                        await prefs.setString('selected_age', jsonEncode(koreanAge));
-                        await prefs.setString('selected_current_daewoon', jsonEncode(currentDaewoon));
-
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => HomeScreen(
-                              selectedResult: {
-                                "saju": saju,
-                                "ganji": ganji,
-                                "daewoon": daewoonList,
-                                "currentDaewoon": currentDaewoon,
-                                "age": koreanAge,
-                              },
-                            ),
-                          ),
-                          (route) => false, // 모든 이전 화면 제거
-                        );  
-                      }
-                    } else {
-                      print("❌ 사주 선택이 취소되었거나 오류 발생");
-                    }
-                  },
-
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text("사주 선택", style: TextStyle(fontSize: 18, color: Colors.white)),
-                ),
-              ),
-
-          ],
-        ),
-      ),
-
     );
   }
-Fortune pickFortuneByElement(List<Fortune> list, String element) {
-  final filtered = list.where((f) => f.element == element).toList();
-  if (filtered.isEmpty) return list.first; // fallback
-  final random = Random();
-  return filtered[random.nextInt(filtered.length)];
-}
 
-Future<List<Fortune>> getAllFortunesFromJson() async {
-  final String response = await rootBundle.loadString('assets/fortune_data.json');
-  final List<dynamic> data = json.decode(response);
-  return data.map((json) => Fortune.fromJson(json)).toList();
-}
+  Widget _buildSajuList(List<SajuInfo> list) {
+    if (list.isEmpty) {
+      return const Center(
+        child: Text('등록된 사주가 없습니다', style: TextStyle(color: Colors.grey)),
+      );
+    }
 
+    return ListView.separated(
+      itemCount: list.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final saju = list[index];
+        final isSelected = _selectedSaju == saju;
 
-Future<void> _loadUserData() async {
-  final data = await loadSajuList();
-  if (data.isNotEmpty) {
-    // context는 initState에서는 바로 사용하면 안 되므로 Future.microtask로 감싸기
-    Future.microtask(() {
-      Provider.of<SajuProvider>(context, listen: false).setList(data);
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          leading: CircleAvatar(
+            backgroundColor: Colors.grey.shade200,
+            child: Icon(
+              saju.relation == '남자' ? Icons.man : Icons.woman,
+              color: saju.isFavorite ? Colors.amber : Colors.black87,
+            ),
+          ),
+          onTap: () {
+            setState(() {
+              _selectedSaju = isSelected ? null : saju;
+              if (_selectedSaju != null) {
+                // 우측 패널에 결과 화면 표시
+                _loadResultForSelectedSaju(_selectedSaju!);
+              } else {
+                _rightPanelContent = null;
+              }
+            });
+          },
+          selected: isSelected,
+          selectedTileColor: Colors.grey.shade100,
+          title: Row(
+            children: [
+              Text(saju.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 6),
+              if (saju.element.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: SajuConstants.getElementColor(saju.element),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    saju.element,
+                    style: const TextStyle(fontSize: 12, color: Colors.white),
+                  ),
+                ),
+            ],
+          ),
+          subtitle: Text(
+            '${saju.birth} (${saju.relation})',
+            style: const TextStyle(color: Colors.grey),
+          ),
+          trailing: PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'edit') {
+                _editItem(saju);
+              } else if (value == 'delete') {
+                _deleteItem(saju);
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'edit', child: Text('수정')),
+              PopupMenuItem(value: 'delete', child: Text('삭제')),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_selectedSaju == null)
+            _buildButton('사주 추가', Colors.indigo, _navigateToInput),
+          if (_selectedSaju != null) ...[
+            _buildButton('사주 조회', Colors.deepPurpleAccent, _navigateToResult),
+            const SizedBox(height: 8),
+            _buildButton('사주 선택', Colors.indigo, _selectAndNavigateHome),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildButton(String text, Color color, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: Text(text, style: const TextStyle(fontSize: 18, color: Colors.white)),
+      ),
+    );
+  }
+
+  void _navigateToInput() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SajuInputScreen()),
+    );
+  }
+
+  void _loadResultForSelectedSaju(SajuInfo saju) {
+    setState(() {
+      _rightPanelContent = SajuResultScreen(
+        inputOption: _generateInputOption(saju),
+        selectedTime: saju.birthDateTime,
+        saju: saju,
+      );
     });
   }
-}
 
-Color _elementColor(String element/*, DateTime birthTime*/) {
-  
-
-  switch (element) {
-      case "금":
-        return Colors.grey;
-      case "토":
-        return Colors.orange;
-      case "수":
-        return Colors.blue;
-      case "목":
-        return Colors.green;
-      case "화":
-        return Colors.red;
-      default:
-        return Colors.black;
+  void _navigateToResult() {
+    if (_selectedSaju == null) return;
+    
+    // 작은 화면에서는 네비게이션으로 이동
+    final constraints = MediaQuery.of(context).size.width;
+    if (constraints <= 800) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SajuResultScreen(
+            inputOption: _generateInputOption(_selectedSaju!),
+            selectedTime: _selectedSaju!.birthDateTime,
+            saju: _selectedSaju!,
+          ),
+        ),
+      );
+    } else {
+      // 큰 화면에서는 우측 패널에 표시
+      _loadResultForSelectedSaju(_selectedSaju!);
     }
   }
-}
 
+  Future<void> _selectAndNavigateHome() async {
+    if (_selectedSaju == null) return;
 
-class EditSajuScreen extends StatelessWidget {
-  final SajuInfo saju;
-  const EditSajuScreen({super.key, required this.saju});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('사주 수정')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("이름: ${saju.name}"),
-            Text("생년월일: ${saju.birth}"),
-            Text("관계: ${saju.relation}"),
-            Text("오행: ${saju.element}"),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context, saju); // 그대로 반환
-              },
-              child: const Text("수정 완료"),
-            )
-          ],
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SajuResultScreen(
+          inputOption: _generateInputOption(_selectedSaju!),
+          selectedTime: _selectedSaju!.birthDateTime,
+          isSelectMode: true,
+          saju: _selectedSaju!,
         ),
       ),
     );
+
+    if (result == null) return;
+
+    // ✅ 일간 추출: sipseong_info의 '일간' 필드 우선, 없으면 일주에서 추출
+    final ganji = result['ganji'] != null ? Map<String, String?>.from(result['ganji']) : {};
+    final ilJu = ganji['일주'] ?? '';
+    final ilGanFromSipseong = result['sipseong_info']?['일간'] ?? '';
+    final ilGanFromIlJu = ilJu.isNotEmpty ? ilJu.substring(0, 1) : '';
+    // "일간"이라는 라벨이 아닌 실제 간지인지 확인
+    final validIlGan = (ilGanFromSipseong.isNotEmpty && 
+                       ilGanFromSipseong != '일간' && 
+                       ilGanFromSipseong.length == 1) 
+                       ? ilGanFromSipseong 
+                       : ilGanFromIlJu;
+
+    final sipseong = SipseongInfo(
+      yinYang: result['sipseong_info']?['기준음양'] ?? '',
+      fiveElement: result['sipseong_info']?['기준오행'] ?? '',
+      yearGan: result['sipseong_info']?['년주십성']?['천간']?['십성'] ?? '',
+      yearJi: result['sipseong_info']?['년주십성']?['지지']?['십성'] ?? '',
+      wolGan: result['sipseong_info']?['월주십성']?['천간']?['십성'] ?? '',
+      wolJi: result['sipseong_info']?['월주십성']?['지지']?['십성'] ?? '',
+      ilGan: validIlGan,  // ✅ 실제 일간 간지 사용 (예: "辛")
+      ilJi: result['sipseong_info']?['일주십성']?['지지']?['십성'] ?? '',
+      siGan: result['sipseong_info']?['시주십성']?['천간']?['십성'] ?? '',
+      siJi: result['sipseong_info']?['시주십성']?['지지']?['십성'] ?? '',
+      currDaewoonGan: result['sipseong_info']?['현재대운']?['천간']?['십성'] ?? '',
+      currDaewoonJi: result['sipseong_info']?['현재대운']?['지지']?['십성'] ?? '',
+    );
+
+    final selectedData = SelectedSajuData(
+      saju: result['saju'] as SajuInfo?,
+      ganji: result['ganji'] != null ? Map<String, String?>.from(result['ganji']) : {},
+      daewoon: result['daewoon'] != null ? List<String>.from(result['daewoon']) : [],
+      koreanAge: result['age'] as String? ?? '',
+      currentDaewoon: result['currentDaewoon'] as String? ?? '',
+      sipseong: sipseong,
+      firstLuckAge: result['firstLuckAge'] as int? ?? 0,
+    );
+
+    await sajuStorage.saveSelectedSaju(selectedData);
+
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(
+            selectedResult: {
+              'saju': selectedData.saju,
+              'ganji': selectedData.ganji,
+              'daewoon': selectedData.daewoon,
+              'currentDaewoon': selectedData.currentDaewoon,
+              'age': selectedData.koreanAge,
+              'firstLuckAge': selectedData.firstLuckAge,
+              'sipseong_yinyang': sipseong.yinYang,
+              'sipseong_fiveElement': sipseong.fiveElement,
+              'sipseong_year_gan': sipseong.yearGan,
+              'sipseong_year_ji': sipseong.yearJi,
+              'sipseong_wol_gan': sipseong.wolGan,
+              'sipseong_wol_ji': sipseong.wolJi,
+              'sipseong_il_gan': sipseong.ilGan,
+              'sipseong_il_ji': sipseong.ilJi,
+              'sipseong_si_gan': sipseong.siGan,
+              'sipseong_si_ji': sipseong.siJi,
+              'sipseong_curr_daewoon_gan': sipseong.currDaewoonGan,
+              'sipseong_curr_daewoon_ji': sipseong.currDaewoonJi,
+            },
+          ),
+        ),
+        (route) => false,
+      );
+    }
   }
 }

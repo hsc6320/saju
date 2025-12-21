@@ -185,56 +185,56 @@ Future<String> getYearGanjiFromJson(DateTime date) async {
 
   return "Unknown";
 }
-  
-  Future<String?> getWolJuFromDate(DateTime solarDate) async {
-    final jsonString = await rootBundle.loadString('assets/converted.json');
-    final List<dynamic> jsonData = json.decode(jsonString);
 
-    DateTime? closestSolarDate;
-    Map<String, dynamic>? selectedItem;
+Future<String?> getWolJuFromDate(DateTime solarDate) async {
+  final jsonString = await rootBundle.loadString('assets/converted.json');
+  final List<dynamic> jsonData = json.decode(jsonString);
 
-    for (final item in jsonData) {
-      final solarStr = item['양력기준일'];
-      try {
-        final currentSolar = DateTime.parse(solarStr);
-        if (currentSolar.isAfter(solarDate)) continue;
-        if (closestSolarDate == null || currentSolar.isAfter(closestSolarDate)) {
-          closestSolarDate = currentSolar;
-          selectedItem = item;
-        }
-      } catch (_) {
-        continue;
+  DateTime? closestSolarDate;
+  Map<String, dynamic>? selectedItem;
+
+  for (final item in jsonData) {
+    final solarStr = item['양력기준일'];
+    try {
+      final currentSolar = DateTime.parse(solarStr);
+      if (currentSolar.isAfter(solarDate)) continue;
+      if (closestSolarDate == null || currentSolar.isAfter(closestSolarDate)) {
+        closestSolarDate = currentSolar;
+        selectedItem = item;
       }
+    } catch (_) {
+      continue;
     }
-
-    if (selectedItem == null || closestSolarDate == null) return null;
-    print("음력 변환 일 : $selectedItem");
-
-    // 1. 연간 추출
-    final String yearStem = selectedItem['년주'].toString().trim().substring(0, 1);
-   // yearStem = convertGanToHanja(yearStem)
-   
-    final int groupIndex = getYearGroupIndex(yearStem);
-    if (groupIndex == -1) return null;
-    // 2. 절기 기준으로 월 인덱스 결정
-    int monthIndex = -1;
-    for (int i = 0; i < solarTerms.length; i++) {
-      final term = solarTerms[i];
-      var termDate = DateTime(solarDate.year, term['month'], term['day']);
-      if(i == 11) {
-        termDate = DateTime(solarDate.year+1, term['month'], term['day']);
-      }
-      if (!solarDate.isBefore(termDate)) {
-        monthIndex = i;
-      }
-    }
-
-    // 소한(1/6) 이전일 경우 전년도 12월로 간주
-    if (monthIndex == -1) monthIndex = 11;
-
-    return monthStemTable[groupIndex][monthIndex];
   }
+
+  if (selectedItem == null || closestSolarDate == null) return null;
+  print("음력 변환 일 : $selectedItem");
+
+  // 1. 연간 추출
+  final String yearStem = selectedItem['년주'].toString().trim().substring(0, 1);
+  // yearStem = convertGanToHanja(yearStem)
   
+  final int groupIndex = getYearGroupIndex(yearStem);
+  if (groupIndex == -1) return null;
+  // 2. 절기 기준으로 월 인덱스 결정
+  int monthIndex = -1;
+  for (int i = 0; i < solarTerms.length; i++) {
+    final term = solarTerms[i];
+    var termDate = DateTime(solarDate.year, term['month'], term['day']);
+    if(i == 11) {
+      termDate = DateTime(solarDate.year+1, term['month'], term['day']);
+    }
+    if (!solarDate.isBefore(termDate)) {
+      monthIndex = i;
+    }
+  }
+
+  // 소한(1/6) 이전일 경우 전년도 12월로 간주
+  if (monthIndex == -1) monthIndex = 11;
+
+  return monthStemTable[groupIndex][monthIndex];
+}
+
 const List<String> ganji60 = [
   '갑자', '을축', '병인', '정묘', '무진', '기사', '경오', '신미', '임신', '계유',
   '갑술', '을해', '병자', '정축', '무인', '기묘', '경진', '신사', '임오', '계미',

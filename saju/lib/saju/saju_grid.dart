@@ -45,6 +45,7 @@ class SajuGrid extends StatelessWidget {
   final List<SajuPillar> pillars;
   const SajuGrid({super.key, required this.pillars});
 
+  
   Widget buildFixedHeightTextBlock(String text, double height) {
     final lines = text.split('\n');
     while (lines.length < 3) {

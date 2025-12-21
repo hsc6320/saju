@@ -61,13 +61,13 @@ class FortuneScreenState extends State<FortuneScreen> {
     print("🔑 API KEY: ${dotenv.env['OPENAI_API_KEY']}");
     setState(() => loading = true);
 
-    final result = await GPTService.getFortuneInterpretation(
-      _currentFortune!.guaName,
-      _currentFortune!.poem,
-      dotenv.env['OPENAI_API_KEY']!,
-    );
+    //final result = await GPTService.getFortuneInterpretation(
+     // _currentFortune!.guaName,
+     // _currentFortune!.poem,
+    //  dotenv.env['OPENAI_API_KEY']!,
+   // );
 
-    if (result != null) {
+   /* if (result != null) {
       print("✅ GPT 응답 결과:\n$result");
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString("last_gpt_result", result);
@@ -76,7 +76,7 @@ class FortuneScreenState extends State<FortuneScreen> {
     setState(() {
       gptResult = result;
       loading = false;
-    });
+    });*/
   }
 
   
@@ -84,54 +84,65 @@ class FortuneScreenState extends State<FortuneScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("운세 보기")),
-      body : Padding (
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
-        child: SingleChildScrollView(
-          child : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _currentFortune!.guaName ?? "안녕하세요", 
-                style: Theme.of(context).textTheme.headlineSmall
-              ),
-              const SizedBox(height: 10),
-              Text("시:", style: Theme.of(context).textTheme.titleMedium),
-              Text(_currentFortune!.poem ?? "기다려주세요"),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: loading ? null : _getGPTInterpretation,
-                icon: const Icon(Icons.auto_fix_high),
-                label: Text(loading ? "해석 중..." : "AI 해석 보기"),
-              ),
-              const SizedBox(height: 16),
-              if (gptResult != null) ...[
-                Text("해석", style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                Text(
-                  gptResult!,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ],
-              //const Spacer(),
-               const SizedBox(height: 40), // Spacer 대신 공간 확보
-              Center(
-                child: TextButton(
-                //  onPressed: _pickRandomFortune,
-                  onPressed: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    final saved = prefs.getString("last_gpt_result");
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxWidth = constraints.maxWidth > 700 ? 700.0 : constraints.maxWidth;
+          
+          return Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _currentFortune!.guaName ?? "안녕하세요", 
+                        style: Theme.of(context).textTheme.headlineSmall
+                      ),
+                      const SizedBox(height: 10),
+                      Text("시:", style: Theme.of(context).textTheme.titleMedium),
+                      Text(_currentFortune!.poem ?? "기다려주세요"),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: loading ? null : _getGPTInterpretation,
+                        icon: const Icon(Icons.auto_fix_high),
+                        label: Text(loading ? "해석 중..." : "AI 해석 보기"),
+                      ),
+                      const SizedBox(height: 16),
+                      if (gptResult != null) ...[
+                        Text("해석", style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 10),
+                        Text(
+                          gptResult!,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ],
+                      //const Spacer(),
+                      const SizedBox(height: 40), // Spacer 대신 공간 확보
+                      Center(
+                        child: TextButton(
+                        //  onPressed: _pickRandomFortune,
+                          onPressed: () async {
+                            final prefs = await SharedPreferences.getInstance();
+                            final saved = prefs.getString("last_gpt_result");
 
-                    setState(() {
-                      gptResult = saved ?? "저장된 해석 결과가 없습니다.";
-                    });
-                  },
-                  child: const Text("다시 보기"),
+                            setState(() {
+                              gptResult = saved ?? "저장된 해석 결과가 없습니다.";
+                            });
+                          },
+                          child: const Text("다시 보기"),
+                        ),
+                      )
+                    ],
+                  ),
                 ),
-              )
-            ],
-          ),
-        ),
-      )
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

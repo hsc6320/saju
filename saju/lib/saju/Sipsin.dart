@@ -1,3 +1,31 @@
+Map<String, String> getElementAndYinyang(String gan) {
+  
+  const Map<String, String> fiveElementStandardMap = {
+    '甲': '목', '乙': '목',
+    '丙': '화', '丁': '화',
+    '戊': '토', '己': '토',
+    '庚': '금', '辛': '금',
+    '壬': '수', '癸': '수',
+  };
+
+  const Map<String, String> yinyangMap = {
+    '甲': '양', '乙': '음',
+    '丙': '양', '丁': '음',
+    '戊': '양', '己': '음',
+    '庚': '양', '辛': '음',
+    '壬': '양', '癸': '음',
+  };
+
+  String? element = fiveElementStandardMap[gan];
+  String? yinyang = yinyangMap[gan];
+
+  return {
+    '오행': element ?? '알 수 없음',
+    '음양': yinyang ?? '알 수 없음',
+  };
+}
+
+
 const Map<String, String> fiveElementMap = {
   '甲': '木', '乙': '木',
   '丙': '火', '丁': '火',
