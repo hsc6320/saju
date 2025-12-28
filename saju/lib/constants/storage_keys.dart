@@ -34,6 +34,10 @@ class StorageKeys {
   static const String selectedDate = 'selected_date';
   static const String selectedTime = 'selected_time';
 
+  // 개인맞춤입력 및 설정
+  static const String personalInfo = 'personal_info';
+  static const String notificationSettings = 'notification_settings';
+
   /// 모든 선택된 사주 관련 키 목록
   static List<String> get allSelectedSajuKeys => [
     selectedSaju,

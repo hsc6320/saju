@@ -7,7 +7,7 @@ class SajuInfo {
   final String birth;
   final String element;
   final String lunar;
-  final TimeOfDay time;
+  final TimeOfDay? time;
   bool isFavorite;
   final bool isEditing;
 
@@ -17,7 +17,7 @@ class SajuInfo {
     required this.birth,
     required this.element,
     required this.lunar,
-    required this.time,
+    this.time,
     this.isFavorite = false,
     this.isEditing = false,
   });
@@ -38,7 +38,9 @@ class SajuInfo {
     final year = int.tryParse(parts[0]) ?? DateTime.now().year;
     final month = int.tryParse(parts[1]) ?? 1;
     final day = int.tryParse(parts[2]) ?? 1;
-    return DateTime(year, month, day, time.hour, time.minute);
+    final hour = time?.hour ?? 0;
+    final minute = time?.minute ?? 0;
+    return DateTime(year, month, day, hour, minute);
   }
 
   /// JSON 직렬화
@@ -48,23 +50,27 @@ class SajuInfo {
         'birth': birth,
         'element': element,
         'isLunar': lunar,
-        'time': '${time.hour}:${time.minute}',
+        'time': time != null ? '${time!.hour}:${time!.minute}' : null,
         'isFavorite': isFavorite,
       };
 
   /// JSON 역직렬화
   factory SajuInfo.fromJson(Map<String, dynamic> json) {
-    final timeParts = (json['time'] as String? ?? '0:0').split(':');
+    TimeOfDay? time;
+    if (json['time'] != null) {
+      final timeParts = (json['time'] as String).split(':');
+      time = TimeOfDay(
+        hour: int.tryParse(timeParts[0]) ?? 0,
+        minute: int.tryParse(timeParts.length > 1 ? timeParts[1] : '0') ?? 0,
+      );
+    }
     return SajuInfo(
       name: json['name'] ?? '',
       relation: json['relation'] ?? '',
       birth: json['birth'] ?? '',
       element: json['element'] ?? '',
       lunar: json['isLunar'] ?? 'false',
-      time: TimeOfDay(
-        hour: int.tryParse(timeParts[0]) ?? 0,
-        minute: int.tryParse(timeParts.length > 1 ? timeParts[1] : '0') ?? 0,
-      ),
+      time: time,
       isFavorite: json['isFavorite'] ?? false,
     );
   }
@@ -76,7 +82,7 @@ class SajuInfo {
         birth: '',
         element: '',
         lunar: 'false',
-        time: const TimeOfDay(hour: 0, minute: 0),
+        time: null,
       );
 
   /// 복사 메서드

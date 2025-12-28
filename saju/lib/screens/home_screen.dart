@@ -11,6 +11,7 @@ import '../models/selected_saju_data.dart';
 import '../services/saju_storage_service.dart';
 import 'Saju_ChatScreen.dart';
 import 'saju_list_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final Map<String, dynamic>? selectedResult;
@@ -263,7 +264,10 @@ class _HomeScreenState extends State<HomeScreen> {
             title: const Text('사주목록'),
             onTap: () => _navigateToSajuList(),
           ),
-          const ListTile(title: Text('설정')),
+          ListTile(
+            title: const Text('설정'),
+            onTap: () => _navigateToSettings(),
+          ),
           if (user != null)
             ListTile(
               title: const Text('로그아웃'),
@@ -284,6 +288,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (selected != null && selected is Map<String, dynamic>) {
       _handleSajuSelection(selected);
     }
+  }
+
+  /// 설정 화면으로 이동
+  void _navigateToSettings() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const SettingsScreen(),
+    );
   }
 
   /// 선택된 사주 뷰

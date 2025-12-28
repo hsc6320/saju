@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../SajuProvider.dart';
+import '../api/gpt_service.dart';
 import '../constants/saju_constants.dart';
 import '../models/fortune.dart';
 import '../models/saju_info.dart';
@@ -71,18 +74,130 @@ class _SajuListScreenState extends State<SajuListScreen> {
     }
   }
 
+  /// 이메일에서 ID 추출 (@ 앞 부분)
+  String? _emailId(String? email) {
+    if (email == null || !email.contains('@')) return null;
+    return email.split('@').first;
+  }
+
+  /// 앱 UID 생성 (로그인 ID 우선순위: 이메일ID > displayName > uid)
+  String _getAppUid() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return '';
+    
+    return _emailId(user.email)    // 1순위: hsc6320
+        ?? user.displayName        // 2순위: 홍승창
+        ?? user.uid;               // 3순위: uid
+  }
+
   /// 사주 삭제
   Future<void> _deleteItem(SajuInfo saju) async {
-    final provider = Provider.of<SajuProvider>(context, listen: false);
-    await provider.remove(saju);
+    // 삭제 확인 다이얼로그
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('사주 삭제'),
+        content: Text('${saju.name}의 사주 정보와 저장된 대화내용을 모두 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('삭제', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
 
-    // 선택된 사주가 삭제된 경우 초기화
-    if (_selectedSaju?.name == saju.name && _selectedSaju?.birth == saju.birth) {
-      await sajuStorage.clearSelectedSaju();
-      setState(() {
-        _selectedSaju = null;
-        _selectedData = SelectedSajuData.empty();
-      });
+    if (confirm != true) return;
+
+    // 로딩 다이얼로그 표시
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    try {
+      final provider = Provider.of<SajuProvider>(context, listen: false);
+      bool serverDeleteSuccess = false;
+      
+      // 서버에서 대화 내용 삭제
+      try {
+        final appUid = _getAppUid();
+        if (appUid.isNotEmpty) {
+          serverDeleteSuccess = await GPTService.deleteChatHistory(
+            appUid,
+            saju.name,
+            saju.birth,
+          );
+          if (serverDeleteSuccess) {
+            debugPrint('✅ 서버 대화 내용 삭제 성공: ${saju.name}');
+          } else {
+            debugPrint('⚠️ 서버 대화 내용 삭제 실패: ${saju.name}');
+          }
+        } else {
+          debugPrint('⚠️ app_uid가 없어 서버 대화 내용을 삭제할 수 없습니다.');
+        }
+      } catch (e) {
+        debugPrint('❌ 서버 대화 내용 삭제 중 오류: $e');
+      }
+
+      // 로컬에서 사주 삭제
+      await provider.remove(saju);
+
+      // 선택된 사주가 삭제된 경우 초기화
+      if (_selectedSaju?.name == saju.name && _selectedSaju?.birth == saju.birth) {
+        await sajuStorage.clearSelectedSaju();
+        if (mounted) {
+          setState(() {
+            _selectedSaju = null;
+            _selectedData = SelectedSajuData.empty();
+          });
+        }
+      }
+
+      // 로딩 다이얼로그 닫기
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      // 결과 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              serverDeleteSuccess
+                  ? '${saju.name}의 사주 정보와 대화내용이 삭제되었습니다.'
+                  : '${saju.name}의 사주 정보가 삭제되었습니다. (서버 대화내용 삭제 실패)',
+            ),
+            backgroundColor: serverDeleteSuccess ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      // 로딩 다이얼로그 닫기
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      // 에러 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('삭제 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -390,13 +505,16 @@ class _SajuListScreenState extends State<SajuListScreen> {
           ),
           trailing: PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'edit') {
+              if (value == 'inquiry') {
+                _navigateToResultForSaju(saju);
+              } else if (value == 'edit') {
                 _editItem(saju);
               } else if (value == 'delete') {
                 _deleteItem(saju);
               }
             },
             itemBuilder: (context) => const [
+              PopupMenuItem(value: 'inquiry', child: Text('간지 조회')),
               PopupMenuItem(value: 'edit', child: Text('수정')),
               PopupMenuItem(value: 'delete', child: Text('삭제')),
             ],
@@ -414,11 +532,8 @@ class _SajuListScreenState extends State<SajuListScreen> {
         children: [
           if (_selectedSaju == null)
             _buildButton('사주 추가', Colors.indigo, _navigateToInput),
-          if (_selectedSaju != null) ...[
-            _buildButton('사주 조회', Colors.deepPurpleAccent, _navigateToResult),
-            const SizedBox(height: 8),
+          if (_selectedSaju != null)
             _buildButton('사주 선택', Colors.indigo, _selectAndNavigateHome),
-          ],
         ],
       ),
     );
@@ -475,6 +590,29 @@ class _SajuListScreenState extends State<SajuListScreen> {
     } else {
       // 큰 화면에서는 우측 패널에 표시
       _loadResultForSelectedSaju(_selectedSaju!);
+    }
+  }
+
+  void _navigateToResultForSaju(SajuInfo saju) {
+    // 작은 화면에서는 네비게이션으로 이동
+    final constraints = MediaQuery.of(context).size.width;
+    if (constraints <= 800) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SajuResultScreen(
+            inputOption: _generateInputOption(saju),
+            selectedTime: saju.birthDateTime,
+            saju: saju,
+          ),
+        ),
+      );
+    } else {
+      // 큰 화면에서는 우측 패널에 표시
+      setState(() {
+        _selectedSaju = saju;
+        _loadResultForSelectedSaju(saju);
+      });
     }
   }
 

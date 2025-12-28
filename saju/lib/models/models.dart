@@ -2,6 +2,7 @@
 library models;
 
 export 'fortune.dart';
+export 'personal_info.dart';
 export 'saju_info.dart';
 export 'selected_saju_data.dart';
 

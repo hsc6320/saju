@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/saju_info.dart';
+import '../models/personal_info.dart';
+import '../services/settings_storage_service.dart';
 
 /// GPT API 호출 서비스
 class GPTService {
@@ -176,6 +178,21 @@ class GPTService {
       'currDaewoonJi': currDaewoonJi,
     };
 
+    // 개인맞춤입력 정보 로드 (입력된 항목만 전달)
+    PersonalInfo? personalInfo;
+    Map<String, dynamic>? personalInfoJson;
+    try {
+      personalInfo = await settingsStorage.loadPersonalInfo();
+      if (personalInfo != null) {
+        personalInfoJson = personalInfo.toServerJson();
+        debugPrint('✅ 개인맞춤입력 정보 로드 완료: ${personalInfoJson.isNotEmpty ? "입력된 항목 있음" : "입력된 항목 없음"}');
+      } else {
+        debugPrint('✅ 개인맞춤입력 정보: 없음 (미설정)');
+      }
+    } catch (e) {
+      debugPrint('⚠️ 개인맞춤입력 정보 로드 실패: $e');
+    }
+
     final requestData = {
       'question': userMessage['content'],
       'sajuganji': sajuganji,
@@ -201,6 +218,9 @@ class GPTService {
       'firstLuckAge': firstLuckAge,
       'birth': saju.birth,
       'app_uid': appUid,
+      // 개인맞춤입력 정보 (입력된 항목이 있을 때만 전달)
+      if (personalInfoJson != null && personalInfoJson.isNotEmpty) 
+        'personal_info': personalInfoJson,
     };
 
     final body = jsonEncode(requestData);
@@ -240,6 +260,19 @@ class GPTService {
     debugPrint('╠══════════════════════════════════════════════════════════════');
     debugPrint('║ ❓ 질문: ${userMessage['content']}');
     debugPrint('║ 🎯 mode: $mode');
+    debugPrint('╠══════════════════════════════════════════════════════════════');
+    if (personalInfoJson != null && personalInfoJson.isNotEmpty) {
+      debugPrint('║ 👤 개인맞춤입력 정보 (입력된 항목만) - ✅ 서버 전송됨');
+      debugPrint('║    ${jsonEncode(personalInfoJson)}');
+    } else {
+      debugPrint('║ 👤 개인맞춤입력 정보: 없음 (입력된 항목 없음 또는 미설정) - ❌ 서버 전송 안됨');
+    }
+    debugPrint('╠══════════════════════════════════════════════════════════════');
+    debugPrint('║ 📦 서버 전송 요청 본문 (requestData)에 personal_info 포함 여부:');
+    debugPrint('║    ${requestData.containsKey('personal_info') ? "✅ 포함됨" : "❌ 포함 안됨"}');
+    if (requestData.containsKey('personal_info')) {
+      debugPrint('║    personal_info 내용: ${jsonEncode(requestData['personal_info'])}');
+    }
     debugPrint('╚══════════════════════════════════════════════════════════════');
     debugPrint('');
 
@@ -255,6 +288,85 @@ class GPTService {
       }
     } catch (e) {
       throw Exception('GPT 요청 중 오류 발생: $e');
+    }
+  }
+
+  /// 서버에서 대화 내용 삭제
+  /// app_uid, name, birth를 기반으로 저장된 대화 내용을 삭제합니다.
+  static Future<bool> deleteChatHistory(
+    String appUid,
+    String name,
+    String birth, {
+    String? sessionId,
+  }) async {
+    try {
+      final url = Uri.parse(_apiUrl);
+
+      // 서버가 기대하는 형식으로 요청 본문 구성
+      final requestData = {
+        'delete_history': 'true',  // 대화 내용 삭제 요청
+        'name': name,
+        'birth': birth,
+        'app_uid': appUid,
+        'session_id': sessionId ?? 'single_global_session',
+      };
+
+      final headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+      };
+
+      final body = jsonEncode(requestData);
+
+      debugPrint('');
+      debugPrint('╔══════════════════════════════════════════════════════════════');
+      debugPrint('║ 🗑️ 대화 내용 삭제 요청');
+      debugPrint('╠══════════════════════════════════════════════════════════════');
+      debugPrint('║ 🌐 URL: $url');
+      debugPrint('║ 📤 요청 본문: $body');
+      debugPrint('║ 👤 사용자 정보');
+      debugPrint('║    - app_uid: $appUid');
+      debugPrint('║    - name: $name');
+      debugPrint('║    - birth: $birth');
+      debugPrint('║    - session_id: ${sessionId ?? 'single_global_session'}');
+      debugPrint('╚══════════════════════════════════════════════════════════════');
+      debugPrint('');
+
+      final response = await http.post(url, headers: headers, body: body);
+
+      final decodedBody = utf8.decode(response.bodyBytes);
+      debugPrint('📥 응답 상태: ${response.statusCode}');
+      debugPrint('📥 응답 본문: ${decodedBody.length > 500 ? decodedBody.substring(0, 500) + "..." : decodedBody}');
+
+      if (response.statusCode == 200) {
+        // 응답 본문 확인
+        try {
+          final jsonResponse = jsonDecode(decodedBody);
+          final success = jsonResponse['success'] ?? jsonResponse['deleted'] ?? true;
+          if (success == true || success == 'true') {
+            debugPrint('✅ 대화 내용 삭제 성공');
+            return true;
+          } else {
+            debugPrint('⚠️ 서버에서 삭제 실패 응답: $jsonResponse');
+            return false;
+          }
+        } catch (e) {
+          // JSON 파싱 실패 시 상태 코드만으로 판단
+          debugPrint('✅ 대화 내용 삭제 성공 (상태 코드: 200)');
+          return true;
+        }
+      } else if (response.statusCode == 404) {
+        // 대화 내용이 없는 경우 (이미 삭제되었거나 없음)
+        debugPrint('ℹ️ 삭제할 대화 내용이 없습니다. (404)');
+        return true;  // 이미 없으므로 성공으로 처리
+      } else {
+        debugPrint('❌ 대화 내용 삭제 실패: ${response.statusCode}');
+        debugPrint('   응답: $decodedBody');
+        return false;
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ 대화 내용 삭제 중 오류 발생: $e');
+      debugPrint('   스택 트레이스: $stackTrace');
+      return false;
     }
   }
 }

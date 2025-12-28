@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 
@@ -56,8 +57,9 @@ class SajuChatScreen extends StatefulWidget {
   State<SajuChatScreen> createState() => _SajuChatScreenState();
 }
 
-class _SajuChatScreenState extends State<SajuChatScreen> {
+class _SajuChatScreenState extends State<SajuChatScreen> with WidgetsBindingObserver {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
   final List<Map<String, String>> _messages = [];
   final ScrollController _scrollController = ScrollController();
   
@@ -65,18 +67,30 @@ class _SajuChatScreenState extends State<SajuChatScreen> {
   bool _isLoading = false;
   bool _isLoadingHistory = true; // 대화 내용 불러오기 중인지 여부
   SajuInfo? _selectedSajuForList; // 좌측 목록에서 선택된 사주
+  int? _longPressedIndex; // 롱프레스된 메시지의 인덱스
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadChatHistory();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
+    _focusNode.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 앱이 백그라운드로 전환될 때 키보드 닫기
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _focusNode.unfocus();
+    }
   }
 
   /// GCS에서 대화 내용 불러오기
@@ -100,9 +114,16 @@ class _SajuChatScreenState extends State<SajuChatScreen> {
         });
         
         // 대화 내용을 불러온 후 스크롤을 맨 아래로
-        if (_messages.isNotEmpty) {
-          _scrollToBottom();
-        }
+        // WidgetsBinding을 사용하여 렌더링 완료 후 스크롤
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_messages.isNotEmpty && _scrollController.hasClients) {
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (_scrollController.hasClients) {
+                _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+              }
+            });
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -118,6 +139,9 @@ class _SajuChatScreenState extends State<SajuChatScreen> {
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _isLoading) return;
+
+    // 키보드 내리기
+    _focusNode.unfocus();
 
     setState(() {
       _messages.add({'role': 'user', 'content': text});
@@ -237,23 +261,35 @@ class _SajuChatScreenState extends State<SajuChatScreen> {
         ? const Center(
             child: CircularProgressIndicator(),
           )
-        : Column(
-            children: [
-              Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _messages.length + (_isLoading ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == _messages.length && _isLoading) {
-                      return _buildLoadingIndicator();
-                    }
-                    return _buildMessageBubble(_messages[index]);
-                  },
+        : GestureDetector(
+            onTap: () {
+              // 화면 탭 시 키보드 내리기 및 복사 버튼 숨기기
+              _focusNode.unfocus();
+              if (_longPressedIndex != null) {
+                setState(() {
+                  _longPressedIndex = null;
+                });
+              }
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length + (_isLoading ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == _messages.length && _isLoading) {
+                        return _buildLoadingIndicator();
+                      }
+                      return _buildMessageBubble(_messages[index], index);
+                    },
+                  ),
                 ),
-              ),
-              _buildInputArea(),
-            ],
+                _buildInputArea(),
+              ],
+            ),
           );
   }
 
@@ -365,27 +401,85 @@ class _SajuChatScreenState extends State<SajuChatScreen> {
   }
 
 
-  Widget _buildMessageBubble(Map<String, String> message) {
+  Widget _buildMessageBubble(Map<String, String> message, int index) {
     final isUser = message['role'] == 'user';
+    final content = message['content'] ?? '';
+    final showCopyButton = _longPressedIndex == index && !isUser;
+    
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxBubbleWidth = constraints.maxWidth * 0.75;
         return Align(
           alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.all(12),
-            constraints: BoxConstraints(
-              maxWidth: maxBubbleWidth,
-            ),
-            decoration: BoxDecoration(
-              color: isUser ? Colors.indigo[100] : Colors.grey[200],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              message['content'] ?? '',
-              style: const TextStyle(fontSize: 15),
-            ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onLongPress: () {
+                  // 롱프레스 시 복사 버튼 표시
+                  setState(() {
+                    _longPressedIndex = index;
+                  });
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  constraints: BoxConstraints(
+                    maxWidth: maxBubbleWidth,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isUser ? Colors.indigo[100] : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      content,
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                  ),
+                ),
+              ),
+              if (showCopyButton)
+                Positioned(
+                  top: -8,
+                  right: isUser ? null : 0,
+                  left: isUser ? 0 : null,
+                  child: Material(
+                    elevation: 4,
+                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.indigo,
+                    child: InkWell(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: content));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('텍스트가 복사되었습니다'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                        setState(() {
+                          _longPressedIndex = null;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: const Text(
+                          '복사',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         );
       },
@@ -437,6 +531,7 @@ class _SajuChatScreenState extends State<SajuChatScreen> {
             Expanded(
               child: TextField(
                 controller: _controller,
+                focusNode: _focusNode,
                 decoration: InputDecoration(
                   hintText: '질문을 입력하세요...',
                   border: OutlineInputBorder(
