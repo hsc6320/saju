@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -140,13 +141,32 @@ class _SajuInputScreenState extends State<SajuInputScreen> {
     );
   }
 
-  void _initializeFromExisting() {
+  void _initializeFromExisting() async {
     if (widget.saju != null) {
       _isLunar = false; // 양력으로 고정
       _gender = widget.saju!.relation;
       _selectedDate = widget.saju!.birthDateTime;
       _selectedTime = widget.saju!.time;
       _isTimeUnknown = widget.saju!.time == null;
+      
+      // ✅ 기존 사주의 개인맞춤입력 정보 로드
+      try {
+        final loadedPersonalInfo = await settingsStorage.loadPersonalInfo(
+          name: widget.saju!.name,
+          birth: widget.saju!.birth,
+        );
+        if (mounted) {
+          setState(() {
+            _personalInfo = loadedPersonalInfo;
+            // 텍스트 필드 컨트롤러 값도 업데이트
+            _jobNameController.text = loadedPersonalInfo.jobName ?? '';
+            _hobbyOtherController.text = loadedPersonalInfo.hobbyOther ?? '';
+            _noteController.text = loadedPersonalInfo.note ?? '';
+          });
+        }
+      } catch (e) {
+        debugPrint('⚠️ 개인맞춤입력 정보 로드 실패: $e');
+      }
     }
   }
 
@@ -311,8 +331,12 @@ class _SajuInputScreenState extends State<SajuInputScreen> {
           await provider.add(saju);
         }
 
-        // 개인맞춤입력 정보 저장
-        await settingsStorage.savePersonalInfo(_personalInfo);
+        // 개인맞춤입력 정보 저장 (사주별로 저장)
+        await settingsStorage.savePersonalInfo(
+          _personalInfo,
+          name: saju.name,
+          birth: saju.birth,
+        );
 
         // 사주 결과 계산 및 선택된 사주로 설정
         await _calculateAndSaveSelectedSaju(saju);

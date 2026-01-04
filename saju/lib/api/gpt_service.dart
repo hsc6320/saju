@@ -178,16 +178,24 @@ class GPTService {
       'currDaewoonJi': currDaewoonJi,
     };
 
-    // 개인맞춤입력 정보 로드 (입력된 항목만 전달)
+    // 개인맞춤입력 정보 로드 (현재 사주 정보와 연결된 정보만 로드)
     PersonalInfo? personalInfo;
     Map<String, dynamic>? personalInfoJson;
     try {
-      personalInfo = await settingsStorage.loadPersonalInfo();
+      // ✅ 현재 사주 정보(name, birth)와 연결된 개인맞춤입력 정보만 로드
+      personalInfo = await settingsStorage.loadPersonalInfo(
+        name: saju.name,
+        birth: saju.birth,
+      );
       if (personalInfo != null) {
         personalInfoJson = personalInfo.toServerJson();
-        debugPrint('✅ 개인맞춤입력 정보 로드 완료: ${personalInfoJson.isNotEmpty ? "입력된 항목 있음" : "입력된 항목 없음"}');
+        if (personalInfoJson.isNotEmpty) {
+          debugPrint('✅ 개인맞춤입력 정보 로드 완료 (${saju.name}, ${saju.birth}): 입력된 항목 있음');
+        } else {
+          debugPrint('✅ 개인맞춤입력 정보 로드 완료 (${saju.name}, ${saju.birth}): 입력된 항목 없음');
+        }
       } else {
-        debugPrint('✅ 개인맞춤입력 정보: 없음 (미설정)');
+        debugPrint('✅ 개인맞춤입력 정보: 없음 (${saju.name}, ${saju.birth}) - 미설정');
       }
     } catch (e) {
       debugPrint('⚠️ 개인맞춤입력 정보 로드 실패: $e');
@@ -231,6 +239,9 @@ class GPTService {
     debugPrint('║ 📤 서버 전송 데이터 (SajuApp_Server)');
     debugPrint('╠══════════════════════════════════════════════════════════════');
     debugPrint('║ 🌐 URL: $_apiUrl');
+    debugPrint('╠══════════════════════════════════════════════════════════════');
+    debugPrint('║ 📋 전체 요청 본문 (JSON):');
+    debugPrint('║    ${body.length > 500 ? body.substring(0, 500) + "..." : body}');
     debugPrint('╠══════════════════════════════════════════════════════════════');
     debugPrint('║ 👤 사용자 정보');
     debugPrint('║    - name: ${saju.name}');

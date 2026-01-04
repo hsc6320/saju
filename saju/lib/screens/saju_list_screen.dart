@@ -14,6 +14,7 @@ import '../models/fortune.dart';
 import '../models/saju_info.dart';
 import '../models/selected_saju_data.dart';
 import '../services/saju_storage_service.dart';
+import '../services/settings_storage_service.dart';
 import 'home_screen.dart';
 import 'saju_input_screen.dart';
 import 'saju_result_screen.dart';
@@ -151,6 +152,13 @@ class _SajuListScreenState extends State<SajuListScreen> {
 
       // 로컬에서 사주 삭제
       await provider.remove(saju);
+
+      // ✅ 해당 사주의 개인맞춤입력 정보도 함께 삭제
+      try {
+        await settingsStorage.deletePersonalInfo(saju.name, saju.birth);
+      } catch (e) {
+        debugPrint('⚠️ 개인맞춤입력 정보 삭제 실패: $e');
+      }
 
       // 선택된 사주가 삭제된 경우 초기화
       if (_selectedSaju?.name == saju.name && _selectedSaju?.birth == saju.birth) {

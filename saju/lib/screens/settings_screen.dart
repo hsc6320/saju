@@ -233,7 +233,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-
   Widget _buildSaveButton() {
     return ElevatedButton(
       onPressed: _isSaving ? null : _saveAllSettings,
